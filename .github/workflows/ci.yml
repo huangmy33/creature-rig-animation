@@ -7,17 +7,17 @@ permissions:
   contents: read
 jobs:
   unit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ['3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22'
           cache: npm
@@ -27,23 +27,24 @@ jobs:
       - run: python -m compileall -q scripts examples tests
       - run: node --check scripts/validate_glb.mjs
   blender-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: pip
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22'
           cache: npm
-      - run: sudo apt-get update && sudo apt-get install -y blender
+      # Keep distro Blender and its Python/NumPy together. Do not inject
+      # setup-python's LD_LIBRARY_PATH into Blender's embedded interpreter.
+      - run: sudo apt-get update && sudo apt-get install -y blender python3-numpy python3-venv
       - run: blender --version
-      - run: python -m pip install -r requirements.txt
+      - run: /usr/bin/python3 -m venv .venv-ci
+      - run: .venv-ci/bin/python -m pip install -r requirements.txt
       - run: npm ci --ignore-scripts
-      - run: python examples/run_demo.py --output-dir temp_data/ci
-      - uses: actions/upload-artifact@v4
+      - run: .venv-ci/bin/python examples/run_demo.py --output-dir temp_data/ci
+        env:
+          LD_LIBRARY_PATH: ''
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: blender-smoke-logs
