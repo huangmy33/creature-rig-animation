@@ -1,0 +1,11 @@
+{
+  "name": "creature-rig-animation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Guide-driven non-humanoid GLB rigging and animation with Blender",
+  "license": "MIT",
+  "repository": "github:huangmy33/creature-rig-animation",
+  "engines": {"node": ">=20"},
+  "scripts": {"validate": "node scripts/validate_glb.mjs"},
+  "dependencies": {"gltf-validator": "2.0.0-dev.3.10"}
+}

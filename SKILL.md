@@ -1,7 +1,6 @@
 ---
 name: creature-rig-animation
 description: 将无骨骼 GLB 异形模型自动或半自动转换为可播放的骨骼动画 GLB，支持模型检查、触手/蛇/东方龙等长链中心线提取、双翼与完整生物骨架设计、Blender 自动绑骨、自然语言动作分解、程序化关键帧、形变渲染验收和 glTF 规范校验。适用于用户要求给异形、怪物、触手、翅膀、飞龙、长尾或非人形生物绑骨、生成攻击/摆动/振翅/蜿蜒飞行动画并交付最终 GLB 的场景。
-author: huangmengyang
 ---
 
 # 异形模型绑骨与动画
@@ -17,15 +16,19 @@ author: huangmengyang
 
 ## 环境与工作目录
 
-需要：Python 3.10+、Blender 3.4+、Node.js 18+。
+需要：Python 3.11+、Blender（本地实测版本见 README）、Node.js 20+。作为独立 CLI 或支持本地 Skill 文件夹的 Agent 使用；不依赖私有服务或 API key。
 
-在 Skill 根目录执行脚本；所有中间结果放到 `temp_data/<task-name>/`：
+在仓库根目录执行：
 
 ```bash
-cd user_skills/creature-rig-animation
-python3 -m pip install trimesh numpy scipy networkx scikit-image pillow
-npm install --prefix temp_data/node gltf-validator@2.0.0-dev.3.10
+python3 -m venv .venv
+# macOS/Linux；Windows 使用 .venv\Scripts\Activate.ps1
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+npm ci --ignore-scripts
 ```
+
+使用 [README.md](README.md) 的程序化示例先验证环境。Blender 命令应增加 `--disable-autoexec --python-exit-code 1`，保证异常以非零状态返回。
 
 不要把用户模型、渲染图、`.blend` 或最终 GLB 写入 Skill 源码目录；只写 `temp_data/` 或用户指定的交付目录。
 
@@ -37,8 +40,9 @@ npm install --prefix temp_data/node gltf-validator@2.0.0-dev.3.10
 - [auto_rig_blender.py](scripts/auto_rig_blender.py)：在 Blender 中创建骨架并计算权重。
 - [animate_chain_blender.py](scripts/animate_chain_blender.py)：生成蜿蜒、探查和拍击动作。
 - [animate_wing_blender.py](scripts/animate_wing_blender.py)：生成对称振翅动作。
-- [validate_animation_blender.py](scripts/validate_animation_blender.py)：验证顶点确实发生形变。
-- [render_animation_blender.py](scripts/render_animation_blender.py)：渲染多视角关键帧。
+- [validate_animation_blender.py](scripts/validate_animation_blender.py)：跨完整时间段检测真实形变、网格爆炸/塌缩、异常漂移和循环跳变。
+- [render_animation_blender.py](scripts/render_animation_blender.py)：按复杂度生成六向正交、多角度透视、关键帧和局部特写审查图。
+- [build_review_contact_sheets.py](scripts/build_review_contact_sheets.py)：将审查图整理为逐帧多视图和逐视图时间线总览，避免漏看单图。
 - [validate_glb.mjs](scripts/validate_glb.mjs)：执行 glTF 规范校验。
 
 ## 完整工作流
@@ -151,22 +155,36 @@ blender --background temp_data/<task>/rigged.blend \
 
 ### 7. 数值与视觉验收
 
+默认跨完整动画均匀采样 9 帧。循环动作增加 `--expect-loop`；包含刻意整体位移时增加 `--allow-root-motion`：
+
 ```bash
 blender --background --factory-startup \
   -P scripts/validate_animation_blender.py -- \
-  --input <final.glb>
+  --input <final.glb> --samples 9 --expect-loop
 ```
+
+复杂模型必须使用 `complex` 审查预设：
 
 ```bash
 blender --background --factory-startup \
   -P scripts/render_animation_blender.py -- \
   --input <final.glb> \
-  --output-dir temp_data/<task>/review
+  --output-dir temp_data/<task>/review \
+  --preset complex --max-frames 9
 ```
 
-查看前、侧、透视关键帧。形变数值通过但出现拉裂、塌陷、穿模、方向相反、翼膜折错或头部失稳，仍视为失败，回到引导或动作阶段调整。
+`complex` 会渲染前、后、左、右、顶、底六向正交视图及四个斜向透视视图，并优先覆盖实际关键帧。多部件模型使用 `--detail-objects <mesh...>` 为薄翼、头颈、触手根部、爪部和相邻肢体生成局部特写。
 
-完整门槛与故障处理见 [quality-gates.md](references/quality-gates.md)。
+将全部单图整理为逐帧多视图和逐视图时间线总览：
+
+```bash
+python3 scripts/build_review_contact_sheets.py \
+  --review-dir temp_data/<task>/review
+```
+
+必须读取 `review-manifest.json` 和 `contact-sheets/contact-sheet-index.json`，先逐张检查 `frame-*-all-views.png`，再检查 `timeline-*.png`。逐项检查轮廓方向、关节塌陷/拉长、自穿插、薄片翻面、头部或根部漂移、对称性、连接处脱节和循环跳变。一个视角被遮挡时，使用相对视图、斜向视图或局部特写复核；不能因前三视图未发现问题就判定通过。
+
+完整门槛、阈值和逐视图清单见 [quality-gates.md](references/quality-gates.md)。
 
 ### 8. glTF 规范校验
 

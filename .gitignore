@@ -1,0 +1,22 @@
+# Dependencies and generated assets are not source files.
+.venv/
+node_modules/
+temp_data/
+__pycache__/
+*.py[cod]
+.DS_Store
+.idea/
+.vscode/
+.env
+.env.*
+*.pem
+*.key
+*.blend
+*.blend1
+*.glb
+*.gltf
+*.zip
+coverage.xml
+.coverage
+.pytest_cache/
+# Runtime data may include private models, paths and images.

@@ -13,29 +13,9 @@ import bpy
 from mathutils import Matrix, Vector
 
 
-def read_guides(path):
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if data.get("version") != 1 or data.get("coordinateSystem") != "BLENDER_Z_UP":
-        raise ValueError("guides must declare version=1 and coordinateSystem=BLENDER_Z_UP")
-    bones = data.get("bones", [])
-    if not 1 <= len(bones) <= 128:
-        raise ValueError("guides must contain 1..128 bones")
-    names = set()
-    for bone in bones:
-        name = bone.get("name", "")
-        if not name or not name.replace("_", "").isalnum() or name in names:
-            raise ValueError("bone names must be unique alphanumeric/underscore identifiers")
-        names.add(name)
-        for key in ("head", "tail"):
-            values = bone.get(key)
-            if not isinstance(values, list) or len(values) != 3 or not all(math.isfinite(v) for v in values):
-                raise ValueError(f"invalid {key} for {name}")
-        if (Vector(bone["head"]) - Vector(bone["tail"])).length < 1e-5:
-            raise ValueError(f"zero-length bone: {name}")
-    for bone in bones:
-        if bone.get("parent") is not None and bone["parent"] not in names:
-            raise ValueError(f"missing parent for {bone['name']}")
-    return data
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from guide_utils import read_guides
+
 
 
 def import_model(path):

@@ -8,6 +8,10 @@ import networkx as nx
 import numpy as np
 import trimesh
 from skimage.morphology import skeletonize
+from mesh_utils import scene_mesh
+from guide_utils import validate_guides
+import math
+import re
 
 
 def axis_value(point, selector):
@@ -31,7 +35,11 @@ def build_graph(mesh, pitch):
             neighbor = lookup.get(tuple(point + delta))
             if neighbor is not None and neighbor > index:
                 graph.add_edge(index, neighbor, weight=float(np.linalg.norm(delta)))
+    if graph.number_of_nodes() < 2:
+        raise ValueError("skeleton has fewer than two points; adjust --pitch or input geometry")
     component = max(nx.connected_components(graph), key=len)
+    if len(component) < 2:
+        raise ValueError("skeleton has no connected chain")
     return voxels, indices, graph.subgraph(component).copy()
 
 
@@ -49,11 +57,21 @@ def main():
     parser.add_argument("--prefix", default="chain")
     parser.add_argument("--reverse", action="store_true", help="Reverse the selected centerline before trimming")
     args = parser.parse_args()
-    if args.bones < 3:
-        raise ValueError("--bones must be at least 3")
+    if not 3 <= args.bones <= 128:
+        raise ValueError("--bones must be between 3 and 128")
+    if not math.isfinite(args.pitch) or args.pitch <= 0:
+        raise ValueError("--pitch must be finite and positive")
+    if not all(math.isfinite(v) and 0 <= v < 1 for v in (args.trim_start, args.trim_end)) or args.trim_start + args.trim_end >= 1:
+        raise ValueError("trim fractions must be nonnegative and sum to less than 1")
+    if bool(args.start) != bool(args.end):
+        raise ValueError("--start and --end must be supplied together")
+    if not re.fullmatch(r"[A-Za-z0-9_]+", args.prefix):
+        raise ValueError("--prefix must be an ASCII identifier")
+    if args.output.exists():
+        raise ValueError("output already exists")
 
     scene = trimesh.load(args.input.resolve(), force="scene")
-    mesh = trimesh.util.concatenate([geometry.copy() for geometry in scene.geometry.values()])
+    mesh = scene_mesh(scene)
     voxels, indices, graph = build_graph(mesh, args.pitch)
     coordinates = voxels.indices_to_points(indices)
     endpoints = [node for node, degree in graph.degree if degree == 1]
@@ -92,6 +110,7 @@ def main():
             "role": "chain", "order": index, "side": 0,
             "limits": {"x": [-30, 30], "y": [-30, 30], "z": [-35, 35]}})
     output = {"version": 1, "kind": args.kind, "coordinateSystem": "BLENDER_Z_UP", "bones": bones}
+    validate_guides(output)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"output": str(args.output), "bones": len(bones), "pathLength": float(distance[-1]),

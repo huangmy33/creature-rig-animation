@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 async function loadValidator() {
   try {
@@ -10,10 +10,10 @@ async function loadValidator() {
     return loaded.default ?? loaded;
   } catch (_) {
     const explicit = process.env.GLTF_VALIDATOR_MODULE;
-    const fallback = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../temp_data/node/node_modules/gltf-validator/module.mjs');
+    const fallback = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../temp_data/node/node_modules/gltf-validator/module.mjs');
     const modulePath = explicit ? path.resolve(explicit) : fallback;
     if (!fs.existsSync(modulePath)) {
-      throw new Error('gltf-validator not found. Run: npm install --prefix temp_data/node gltf-validator@2.0.0-dev.3.10');
+      throw new Error('gltf-validator not found. Run npm ci in the repository root.');
     }
     const loaded = await import(pathToFileURL(modulePath).href);
     return loaded.default ?? loaded;

@@ -1,0 +1,53 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: python -m pip install -r requirements.txt
+      - run: npm ci --ignore-scripts
+      - run: python -m unittest discover -s tests -v
+      - run: python -m compileall -q scripts examples tests
+      - run: node --check scripts/validate_glb.mjs
+  blender-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: sudo apt-get update && sudo apt-get install -y blender
+      - run: blender --version
+      - run: python -m pip install -r requirements.txt
+      - run: npm ci --ignore-scripts
+      - run: python examples/run_demo.py --output-dir temp_data/ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blender-smoke-logs
+          path: |
+            temp_data/ci/*.log
+            temp_data/ci/smoke-results.json
+          if-no-files-found: ignore

@@ -6,6 +6,9 @@ import json
 import numpy as np
 import trimesh
 from PIL import Image, ImageDraw
+from pathlib import Path
+from mesh_utils import scene_mesh
+from guide_utils import read_guides
 
 
 def main():
@@ -15,12 +18,14 @@ def main():
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     scene = trimesh.load(args.input, force="scene")
-    mesh = trimesh.util.concatenate([geometry.copy() for geometry in scene.geometry.values()])
+    mesh = scene_mesh(scene)
     points, _ = trimesh.sample.sample_surface(mesh, min(70000, max(25000, len(mesh.faces) * 4)))
     center = (mesh.bounds[0] + mesh.bounds[1]) / 2
     points -= center
     extent = np.max(mesh.extents)
-    bones = json.load(open(args.guides, encoding="utf-8"))["bones"]
+    if extent <= 0:
+        raise ValueError("mesh has zero extent")
+    bones = read_guides(args.guides)["bones"]
 
     def to_gltf(point):
         x, y, z = point
@@ -58,6 +63,7 @@ def main():
                           coordinates[0] + 4, coordinates[1] + 4), fill=color)
         draw.text((20, 20), label, fill=(15, 23, 42))
         canvas.paste(tile, ((view_index % 2) * size, (view_index // 2) * size))
+    Path(args.output).resolve().parent.mkdir(parents=True, exist_ok=True)
     canvas.save(args.output)
     print(json.dumps({"output": args.output, "bones": len(bones)}))
 

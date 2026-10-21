@@ -6,6 +6,9 @@ from pathlib import Path
 
 import bpy
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from blender_compat import action_fcurves, new_glb_output, validate_motion, check_single_rig
+
 
 def set_rotation(bone, frame, x=0, y=0, z=0):
     bone.rotation_mode = "XYZ"
@@ -20,7 +23,10 @@ def main():
     parser.add_argument("--amplitude", type=float, default=28.0)
     parser.add_argument("--cycles", type=float, default=1.0)
     args = parser.parse_args(argv)
-    output = Path(args.output).resolve()
+    validate_motion(args.amplitude, args.cycles)
+    if args.cycles != 1:
+        parser.error("wing profile currently supports --cycles 1 only")
+    output = new_glb_output(args.output)
     armature = next((obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"), None)
     if armature is None:
         raise RuntimeError("no armature found")
@@ -68,12 +74,13 @@ def main():
             time = (frame - 1) / 96
             set_rotation(bone, frame, x=2 * math.sin(2 * math.pi * time - index * 0.42),
                          z=4 * math.sin(2 * math.pi * time - index * 0.55))
-    for curve in action.fcurves:
+    for curve in action_fcurves(action):
         curve.keyframe_points[-1].co[1] = curve.keyframe_points[0].co[1]
         for point in curve.keyframe_points:
             point.interpolation = "BEZIER"
             point.handle_left_type = "AUTO_CLAMPED"
             point.handle_right_type = "AUTO_CLAMPED"
+    check_single_rig(scene, armature)
     for obj in scene.objects:
         if obj.type == "MESH" and obj.parent is not None:
             world = obj.matrix_world.copy()

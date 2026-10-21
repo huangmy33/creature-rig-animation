@@ -16,7 +16,20 @@ def read_glb_json(path: Path):
     json_length, json_type = struct.unpack_from("<II", raw, 12)
     if json_type != 0x4E4F534A:
         raise ValueError("First GLB chunk is not JSON")
-    return json.loads(raw[20:20 + json_length].decode("utf-8"))
+    if json_length % 4 or json_length == 0 or 20 + json_length > len(raw):
+        raise ValueError("Invalid JSON chunk length")
+    offset = 20 + json_length
+    while offset < len(raw):
+        if offset + 8 > len(raw):
+            raise ValueError("Truncated GLB chunk header")
+        length, _ = struct.unpack_from("<II", raw, offset)
+        if length % 4 or offset + 8 + length > len(raw):
+            raise ValueError("Invalid GLB chunk length")
+        offset += 8 + length
+    data = json.loads(raw[20:20 + json_length].decode("utf-8"))
+    if not isinstance(data, dict) or data.get("asset", {}).get("version") != "2.0":
+        raise ValueError("Missing glTF 2.0 asset metadata")
+    return data
 
 
 def main():
@@ -39,7 +52,8 @@ def main():
     if args.geometry:
         import trimesh
         scene = trimesh.load(path, force="scene")
-        mesh = trimesh.util.concatenate([geometry.copy() for geometry in scene.geometry.values()])
+        from mesh_utils import scene_mesh
+        mesh = scene_mesh(scene)
         result["geometry"] = {"vertices": len(mesh.vertices), "faces": len(mesh.faces),
             "bounds": mesh.bounds.tolist(), "extents": mesh.extents.tolist(),
             "watertight": bool(mesh.is_watertight)}
